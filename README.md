@@ -12,3 +12,5 @@ A Linux Minecraft server launcher write in Bash. When the server crashed, the la
 * 易于移植
 * 可以在任意目录下运行
 * 奇葩的程序逻辑
+
+自 http://www.mcbbs.net/thread-388584-1-1.html 的ylmars
