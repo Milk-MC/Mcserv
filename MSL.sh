@@ -14,7 +14,7 @@ LOGDIR=$MCPATH/MSL/log      #日志目录
 DATE=`date "+%Y-%m-%d"`     #日志名称：YYYYMMDD
 SCREENNAME='minecraft_server'						#显示名
 HISTORY=1024                #screen -h <行数> 　指定视窗的缓冲区行数
-SCREENNAME='milktowm'       #screen名字
+SCREENNAME='milktown'       #screen名字
 MAXHEAP=512				#最大内存
 MINHEAP=512				#最小内存
 CPU_COUNT=1					#CPU核数
@@ -25,30 +25,14 @@ INVOCATION="java -Xmx${MAXHEAP}M -Xms${MINHEAP}M -XX:+UseConcMarkSweepGC \
  -jar $SERVICE $OPTIONS" 	#服务端启动参数
 
 ####################################
-###########     启动      ##########
-####################################
-mc_start(){
-    log_info "准备启动服务器"
-    sudo touch $MCPATH/MSL/start.sh
-    echo $INVOCATION > $MCPATH/MSL/start.sh
-    log_info "完成启动脚本输出到$MCPATH/MSL/start.sh"
-    #if  pgrep -f $SERVICE > /dev/null; then
-        #cd $MCPATH && screen -h $HISTORY -dmS ${SCREENNAME} $INVOCATION
-        
-        if pgrep -f $SERVICE > /dev/null 
-            then 
-            log_info "服务器正在运行"
-            else
-            log_info "服务器不在运行"
-        fi
-        #screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"say SERVER BACKUP STARTING. Server going readonly...\"\015'
-}
-
-
-
-####################################
 ###########     日志      ##########
 ####################################
+DATE_N=`date "+%Y-%m-%d %H:%M:%S"`
+TIME=`date "+%H:%M:%S"`
+USER_N=`whoami`
+                               #启动输出头
+echo -e "\033[34m[${DATE_N}]用户${USER_N}启动脚本 \033[0m" | sudo tee -a $LOGDIR/$DATE.log
+
 function log_info ()
 {
 if [ ! -d $LOGDIR  ]
@@ -57,16 +41,12 @@ if [ ! -d $LOGDIR  ]
     elif [ ! -f "$LOGDIR" ];then
         sudo touch $LOGDIR/$DATE.log
 fi
-    DATE_N=`date "+%Y-%m-%d_%H:%M:%S"`
-    USER_N=`whoami`
-    echo "${DATE_N}用户${USER_N}执行$0[INFO]$@" |sudo tee -a $LOGDIR/$DATE.log #执行成功日志打印路径
+    echo "[${TIME} INFO]$@" |sudo tee -a $LOGDIR/$DATE.log #执行成功日志打印路径
 }
 
 function log_error ()
 {
-DATE_N=`date "+%Y-%m-%d_%H:%M:%S"`
-USER_N=`whoami`
-echo -e "\033[41;37m ${DATE_N}用户${USER_N}执行$0[ERROR]$@ \033[0m"  |sudo tee -a $LOGDIR/$DATE.log #执行失败日志打印路径
+echo -e "\033[41;37m[${TIME} ERROR]$@ \033[0m"  |sudo tee -a $LOGDIR/$DATE.log #执行失败日志打印路径
 
 }
 
@@ -83,6 +63,55 @@ fi
 }
 trap 'fn_log "DO NOT SEND CTR + C WHEN EXECUTE SCRIPT !!!! "'  2
 
+####################################
+###########     启动      ##########
+####################################
+
+mc_start(){
+    if [ ! -f "$MCPATH/MSL/screen-ls.temp" ];then
+        sudo touch $MCPATH/MSL/screen-ls.temp 
+    fi
+    sudo screen -ls > $MCPATH/MSL/screen-ls.temp
+    if pgrep -f $SERVICE > /dev/null 
+        then 
+        log_info "服务器已在运行,无需再次启动" && exit 1
+        elif ((  ` grep -o 'milktowm' screen-ls |wc -l` >= 1  ))
+            then
+            log_info "服务器screen已在运行,无需再次启动" && exit 1
+            else 
+            log_info "服务器不在运行，可启动服务器"
+    fi
+    log_info "准备启动服务器"
+    sudo touch $MCPATH/MSL/start.sh && sudo chmod 777 $MCPATH/MSL/start.sh
+    log_info "启动参数为：$INVOCATION"
+    echo $INVOCATION > $MCPATH/MSL/start.sh
+    log_info "完成启动脚本输出到$MCPATH/MSL/start.sh"    
+
+    screen -dmS $SCREENNAME
+    log_info "开启窗口$SCREENNAME" 
+    screen -x milktowm -X stuff "$MCPATH/MSL/start.sh\n"
+    log_info "窗口启动完成，开服指令下达"
+    sleep 5
+    if pgrep -f $SERVICE > /dev/null 
+        then 
+        log_info "服务器运行成功"
+        else
+        log_error "服务器启动失败"
+    fi
+
+}
+
+mc-status(){
+    if pgrep -f $SERVICE > /dev/null 
+        then 
+        log_info "服务器已在运行"
+        else
+        log_info "服务器不在运行，可启动服务器"
+    fi
+}
+
+
+
 
 ####################################
 ###########     选项      ##########
@@ -95,7 +124,9 @@ case "$1" in
         log_info "添加用户$2"
         sudo useradd -s /bin/bash -d $MCPATH -m $2 && sudo passwd $2
     ;;
-
+    status)
+    mc-status
+    ;;
     *)
     echo "可用选项: $0 {start|stop|update|backup|status|restart|useradd|command \"服务器指令\"}"
     exit 1
