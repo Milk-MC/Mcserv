@@ -2,9 +2,13 @@
 ####################################
 ###########     信息      ##########
 ####################################
-#version 1.0.0 2019-2-7
+#version 1.0.2 2019-2-16
 #By MilkMC-Hailay
 #日志参考“二进制-程序猿“https://blog.csdn.net/wylfengyujiancheng/article/details/50019299 
+#更新日志：
+#2019-2-7 ver1.0.0日志模块
+#2019-2-8 ver1.0.1程序启动-停止模块+日志
+#2019-2-16 ver1.0.2详细了解JVM参数-并发；注释；打印
 
 ####################################
 ###########     设置      ##########
@@ -12,12 +16,11 @@
 MCPATH='/mc'                #Minecraft目录SCREENNAME
 LOGDIR=$MCPATH/MSL/log      #日志目录
 DATE=`date "+%Y-%m-%d"`     #日志名称：YYYYMMDD
-SCREENNAME='minecraft_server'						#显示名
 HISTORY=1024                #screen -h <行数> 　指定视窗的缓冲区行数
 SCREENNAME='milktown'       #screen名字
-MAXHEAP=512				#最大内存
-MINHEAP=512				#最小内存
-CPU_COUNT=1					#CPU核数
+MAXHEAP=512				    #最大内存
+MINHEAP=512				    #最小内存
+CPU_COUNT=1					#CPU核数（并行回收器线程数）
 SERVICE='minecraft_server.jar'	#服务端核心名字
 OPTIONS='nogui'				#java选项
 INVOCATION="java -Xmx${MAXHEAP}M -Xms${MINHEAP}M -XX:+UseConcMarkSweepGC \
@@ -71,11 +74,11 @@ mc_start(){
     if [ ! -f "$MCPATH/MSL/screen-ls.temp" ];then
         sudo touch $MCPATH/MSL/screen-ls.temp 
     fi
-    sudo screen -ls > $MCPATH/MSL/screen-ls.temp
+    sudo echo screen -ls > $MCPATH/MSL/screen-ls.temp
     if pgrep -f $SERVICE > /dev/null 
         then 
         log_info "服务器已在运行,无需再次启动" && exit 1
-        elif ((  ` grep -o 'milktowm' screen-ls |wc -l` >= 1  ))
+        elif ((  ` grep -o '$SCREENNAME' $MCPATH/MSL/screen-ls.temp |wc -l` >= 1  ))
             then
             log_info "服务器screen已在运行,无需再次启动" && exit 1
             else 
@@ -89,7 +92,7 @@ mc_start(){
 
     screen -dmS $SCREENNAME
     log_info "开启窗口$SCREENNAME" 
-    screen -x milktowm -X stuff "$MCPATH/MSL/start.sh\n"
+    screen -x $SCREENNAME -X stuff "$MCPATH/MSL/start.sh\n"
     log_info "窗口启动完成，开服指令下达"
     sleep 5
     if pgrep -f $SERVICE > /dev/null 
@@ -101,17 +104,45 @@ mc_start(){
 
 }
 
-mc-status(){
-    if pgrep -f $SERVICE > /dev/null 
-        then 
-        log_info "服务器已在运行"
+####################################
+###########     停止      ##########
+####################################
+mc_stop(){
+    if [ pgrep -f $SERVICE > /dev/null && ` grep -o '$SCREENNAME' $MCPATH/MSL/screen-ls.temp |wc -l` >= 1 ]
+        then
+        log_info "检测到服务器已启动，可执行关服程序"
+        screen -x $SCREENNAME -X stuff "say 服务器准备在10S后关闭（或重启），请移动到安全位置并拾起重要的掉落物品。\n"
+        log_info "已在服务器中输出关服准备公告"
+        sleep 10
+        screen -x $SCREENNAME -X stuff "save-all\n"
+        screen -x $SCREENNAME -X stuff "stop\n"
         else
-        log_info "服务器不在运行，可启动服务器"
+        log_info "服务器未启动，不用关服"
     fi
 }
 
+####################################
+###########     状态      ##########
+####################################
+mc-status(){
+    if pgrep -f $SERVICE > /dev/null 
+        then 
+        log_info "服务器已在运行,无需再次启动" && exit 1
+        elif ((  ` grep -o '$SCREENNAME' $MCPATH/MSL/screen-ls.temp |wc -l` >= 1  ))
+            then
+            log_info "服务器screen已在运行,无需再次启动" && exit 1
+            else 
+            log_info "服务器不在运行，可启动服务器"
+    fi
+}
 
-
+screen-ls(){
+    SCREENLS=$(sudo ls /run/screen/S-`whoami`)
+    echo $SCREENLS > $MCPATH/MSL/screen-ls.temp
+    log_info "查看screen数量"
+    cat -n $MCPATH/MSL/screen-ls.temp
+    grep -o '$SCREENNAME' $MCPATH/MSL/screen-ls.temp |wc -l
+}
 
 ####################################
 ###########     选项      ##########
@@ -120,6 +151,9 @@ case "$1" in
     start)
     mc_start
     ;;
+    stop)
+    mc_stop
+    ;;
     useradd)
         log_info "添加用户$2"
         sudo useradd -s /bin/bash -d $MCPATH -m $2 && sudo passwd $2
@@ -127,8 +161,11 @@ case "$1" in
     status)
     mc-status
     ;;
+    screen-ls)
+    screen-ls
+    ;;
     *)
-    echo "可用选项: $0 {start|stop|update|backup|status|restart|useradd|command \"服务器指令\"}"
+    echo "可用选项: $0 {start|stop|update|backup|status|restart|useradd|screen-ls|command \"服务器指令 \n 建议开启一个screen运行本程序\"}"
     exit 1
     ;;
 esac    
